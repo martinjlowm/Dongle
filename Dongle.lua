@@ -1132,29 +1132,23 @@ end
 
 local function PLAYER_LOGIN()
     Dongle.initialized = true
-    for i=1, table.getn(loadorder) do
-        local obj = loadorder[i]
+    for i = 1, table.getn(loadorder) do
+        local obj = table.remove(loadorder, 1)
+
         if type(obj.Enable) == "function" then
             safecall(obj.Enable, obj)
         end
-        loadorder[i] = nil
     end
 end
 
 local function PLAYER_ENTERING_WORLD()
-    loadqueue_len = table.getn(loadqueue)
+    for i = 1, table.getn(loadqueue) do
+        local obj = table.remove(loadqueue, 1)
 
-    for i = 1, loadqueue_len do
-        local obj = loadqueue[i]
+        table.insert(loadorder, obj)
 
-        if obj then
-            table.insert(loadorder, obj)
-
-            if type(obj.Initialize) == "function" then
-                safecall(obj.Initialize, obj)
-            end
-
-            loadqueue[i] = nil
+        if type(obj.Initialize) == "function" then
+            safecall(obj.Initialize, obj)
         end
     end
 
@@ -1167,12 +1161,11 @@ local function PLAYER_ENTERING_WORLD()
     end
 
     if Dongle.initialized then
-        for i=1, table.getn(loadorder) do
-            local obj = loadorder[i]
+        for i = 1, table.getn(loadorder) do
+            local obj = table.remove(loadorder, 1)
             if type(obj.Enable) == "function" then
                 safecall(obj.Enable, obj)
             end
-            loadorder[i] = nil
         end
     end
 end
@@ -1237,7 +1230,23 @@ local function Activate(self, old)
 
     -- Register for events using Dongle itself
     lib:RegisterEvent("PLAYER_ENTERING_WORLD", PLAYER_ENTERING_WORLD)
-    lib:RegisterEvent("PLAYER_LOGIN", PLAYER_LOGIN)
+    -- Unfortunately, many functions are not available at PLAYER_LOGIN and we
+    -- delay it slightly with an OnUpdate handler
+    local PLAYER_LOGIN_delay
+    do
+        local delay = 0
+        PLAYER_LOGIN_delay = function()
+            delay = delay + arg1
+            if delay >= .5 then
+                PLAYER_LOGIN()
+            end
+            this:SetScript('OnUpdate', nil)
+            PLAYER_LOGIN_delay = nil
+        end
+    end
+    lib:RegisterEvent("PLAYER_LOGIN", function()
+                          this:SetScript('OnUpdate', PLAYER_LOGIN_delay)
+    end)
     lib:RegisterEvent("PLAYER_LOGOUT", PLAYER_LOGOUT)
     lib:RegisterMessage("DONGLE_PROFILE_CHANGED", DONGLE_PROFILE_CHANGED)
 
